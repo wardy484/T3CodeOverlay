@@ -12,10 +12,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
@@ -39,7 +39,7 @@ jobs:
           Get-Content site/repo.json -Raw | ConvertFrom-Json | Out-Null
 
       - name: Upload package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: T3CodeOverlay-windows-x64
           path: out/T3CodeOverlay/latest.zip
