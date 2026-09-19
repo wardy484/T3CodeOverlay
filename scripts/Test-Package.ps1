@@ -12,7 +12,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $PackagePath))
 
 try {
-    $entries = @($archive.Entries | ForEach-Object FullName)
+    $entries = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
     $required = @(
         "T3CodeOverlay.dll",
         "T3CodeOverlay.json",
