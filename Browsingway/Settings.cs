@@ -1,4 +1,4 @@
-﻿using Dalamud.Interface;
+﻿using Dalamud.Interface.Windowing;
 using Dalamud.Bindings.ImGui;
 using System.Numerics;
 using System.Text.RegularExpressions;
@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 namespace Browsingway;
 
 // ReSharper disable once ClassNeverInstantiated.Global
-internal class Settings : IDisposable
+internal class Settings : Window, IDisposable
 {
 	public event EventHandler<InlayConfiguration>? OverlayAdded;
 	public event EventHandler<InlayConfiguration>? OverlayNavigated;
@@ -15,25 +15,93 @@ internal class Settings : IDisposable
 	public event EventHandler<InlayConfiguration>? OverlayZoomed;
 	public event EventHandler<InlayConfiguration>? OverlayMuted;
 	public event EventHandler<InlayConfiguration>? OverlayUserCssChanged;
+	public event EventHandler<string>? T3DataDirectoryChanged;
 	public readonly Configuration Config;
+	public Func<string?>? T3DatabasePathProvider { get; set; }
+	public Func<T3ConnectionStatus>? T3ConnectionStatusProvider { get; set; }
+	public Action? RetryT3Connection { get; set; }
 	private bool _actAvailable = false;
-
-#if DEBUG
-	private bool _open = true;
-#else
-	private bool _open;
-#endif
 
 	private InlayConfiguration? _selectedOverlay;
 	private Timer? _saveDebounceTimer;
 
 	public Settings()
+		: base(
+			"T3 Code Overlay Settings###T3CodeOverlaySettings",
+			ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse)
 	{
-		Services.PluginInterface.UiBuilder.OpenConfigUi += () => _open = true;
+		SizeConstraints = new WindowSizeConstraints
+		{
+			MinimumSize = new Vector2(400, 300),
+			MaximumSize = new Vector2(9001, 9001),
+		};
+#if DEBUG
+		IsOpen = true;
+#endif
+		Services.PluginInterface.UiBuilder.OpenConfigUi += Open;
 		Config = Services.PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+		if (!DateTime.TryParse(Config.LastAcknowledgedT3ActivityAt, out _))
+		{
+			Config.LastAcknowledgedT3ActivityAt = DateTime.UtcNow.ToString("O");
+			SaveSettings();
+		}
+		if (Config.Inlays.Count == 0)
+		{
+			Config.Inlays.Add(new InlayConfiguration
+			{
+				Guid = Guid.NewGuid(),
+				Name = "T3 Code",
+				Url = "http://127.0.0.1:3773",
+				Hidden = true,
+				Framerate = 30,
+				Muted = true,
+			});
+			SaveSettings();
+		}
 	}
 
-	public void Dispose() { }
+	public InlayConfiguration? PrimaryOverlay => Config.Inlays.FirstOrDefault();
+
+	public void TogglePrimaryOverlay()
+	{
+		InlayConfiguration? overlay = PrimaryOverlay;
+		if (overlay is null) return;
+		overlay.Hidden = !overlay.Hidden;
+		SaveSettings();
+	}
+
+	public void ShowPrimaryOverlay()
+	{
+		InlayConfiguration? overlay = PrimaryOverlay;
+		if (overlay is null || !overlay.Hidden) return;
+		overlay.Hidden = false;
+		SaveSettings();
+	}
+
+	public void SetBubblePosition(Vector2 position, bool save)
+	{
+		Config.BubbleX = position.X;
+		Config.BubbleY = position.Y;
+		if (save) SaveSettings();
+	}
+
+	public DateTime LastAcknowledgedT3ActivityAt => DateTime.Parse(Config.LastAcknowledgedT3ActivityAt).ToUniversalTime();
+
+	public DateTime AcknowledgeT3Activity()
+	{
+		DateTime acknowledgedAt = DateTime.UtcNow;
+		Config.LastAcknowledgedT3ActivityAt = acknowledgedAt.ToString("O");
+		SaveSettings();
+		return acknowledgedAt;
+	}
+
+	public void Dispose()
+	{
+		Services.PluginInterface.UiBuilder.OpenConfigUi -= Open;
+		_saveDebounceTimer?.Dispose();
+	}
+
+	private void Open() => IsOpen = true;
 
 	public void OnActAvailabilityChanged(bool available)
 	{
@@ -52,7 +120,7 @@ internal class Settings : IDisposable
 
 	public void HandleConfigCommand(string rawArgs)
 	{
-		_open = true;
+		IsOpen = true;
 
 		// TODO: Add further config handling if required here.
 	}
@@ -158,16 +226,6 @@ internal class Settings : IDisposable
 		}
 	}
 
-	private InlayConfiguration? AddNewOverlay()
-	{
-		InlayConfiguration? overlayConfig = new() { Guid = Guid.NewGuid(), Name = "New overlay", Url = "about:blank" };
-		Config.Inlays.Add(overlayConfig);
-		OverlayAdded?.Invoke(this, overlayConfig);
-		SaveSettings();
-
-		return overlayConfig;
-	}
-
 	private void NavigateOverlay(InlayConfiguration overlayConfig)
 	{
 		if (overlayConfig.Url == "") { overlayConfig.Url = "about:blank"; }
@@ -197,13 +255,6 @@ internal class Settings : IDisposable
 		OverlayDebugged?.Invoke(this, overlayConfig);
 	}
 
-	private void RemoveOverlay(InlayConfiguration overlayConfig)
-	{
-		OverlayRemoved?.Invoke(this, overlayConfig);
-		Config.Inlays.Remove(overlayConfig);
-		SaveSettings();
-	}
-
 	private void DebouncedSaveSettings()
 	{
 		_saveDebounceTimer?.Dispose();
@@ -222,18 +273,8 @@ internal class Settings : IDisposable
 		return Regex.Replace(overlayConfig.Name, @"\s+", "").ToLower();
 	}
 
-	public void Render()
+	public override void Draw()
 	{
-		if (!_open) { return; }
-
-		// Primary window container
-		ImGui.SetNextWindowSizeConstraints(new Vector2(400, 300), new Vector2(9001, 9001));
-		ImGuiWindowFlags windowFlags = ImGuiWindowFlags.None
-		                               | ImGuiWindowFlags.NoScrollbar
-		                               | ImGuiWindowFlags.NoScrollWithMouse
-		                               | ImGuiWindowFlags.NoCollapse;
-		ImGui.Begin("Browsingway Settings", ref _open, windowFlags);
-
 		RenderPaneSelector();
 
 		// Pane details
@@ -253,69 +294,30 @@ internal class Settings : IDisposable
 
 		if (dirty) { DebouncedSaveSettings(); }
 
-		ImGui.End();
 	}
 
 	private void RenderPaneSelector()
 	{
-		// Selector pane
 		ImGui.BeginGroup();
 		ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(0, 0));
 
-		int selectorWidth = 100;
-		ImGui.BeginChild("panes", new Vector2(selectorWidth, -ImGui.GetFrameHeightWithSpacing()), true);
+		const int selectorWidth = 110;
+		ImGui.BeginChild("panes", new Vector2(selectorWidth, -1), true);
 
-		// General settings
 		if (ImGui.Selectable("General", _selectedOverlay == null))
 		{
 			_selectedOverlay = null;
 		}
 
-		// Overlay selector list
 		ImGui.Dummy(new Vector2(0, 5));
-		ImGui.PushStyleVar(ImGuiStyleVar.Alpha, 0.5f);
-		ImGui.Text("- Overlays -");
-		ImGui.PopStyleVar();
-		foreach (InlayConfiguration? overlayConfig in Config?.Inlays!)
+		InlayConfiguration? primaryOverlay = PrimaryOverlay;
+		if (primaryOverlay is not null && ImGui.Selectable("T3 Code", _selectedOverlay == primaryOverlay))
 		{
-			if (ImGui.Selectable($"{overlayConfig.Name}##{overlayConfig.Guid}", _selectedOverlay == overlayConfig))
-			{
-				_selectedOverlay = overlayConfig;
-			}
+			_selectedOverlay = primaryOverlay;
 		}
 
 		ImGui.EndChild();
-
-		// Selector controls
-		ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 0);
-		ImGui.PushFont(UiBuilder.IconFont);
-
-		int buttonWidth = selectorWidth / 2;
-		if (ImGui.Button(FontAwesomeIcon.Plus.ToIconString(), new Vector2(buttonWidth, 0)))
-		{
-			_selectedOverlay = AddNewOverlay();
-		}
-
-		ImGui.SameLine();
-		if (_selectedOverlay != null)
-		{
-			if (ImGui.Button(FontAwesomeIcon.Trash.ToIconString(), new Vector2(buttonWidth, 0)))
-			{
-				InlayConfiguration? toRemove = _selectedOverlay;
-				_selectedOverlay = null;
-				RemoveOverlay(toRemove);
-			}
-		}
-		else
-		{
-			ImGui.PushStyleVar(ImGuiStyleVar.Alpha, 0.5f);
-			ImGui.Button(FontAwesomeIcon.Trash.ToIconString(), new Vector2(buttonWidth, 0));
-			ImGui.PopStyleVar();
-		}
-
-		ImGui.PopFont();
-		ImGui.PopStyleVar(2);
-
+		ImGui.PopStyleVar();
 		ImGui.EndGroup();
 	}
 
@@ -323,31 +325,66 @@ internal class Settings : IDisposable
 	{
 		bool dirty = false;
 
-		ImGui.Text("Select an overlay on the left to edit its settings.");
-
-		if (ImGui.CollapsingHeader("Command Help", ImGuiTreeNodeFlags.DefaultOpen))
+		dirty |= ImGui.Checkbox("Show floating T3 bubble", ref Config.ShowBubble);
+		ImGui.TextWrapped("Click the bubble to show or hide T3 Code. Select the T3 Code overlay on the left to change its URL, size, zoom, or frame rate.");
+		T3ConnectionStatus? connection = T3ConnectionStatusProvider?.Invoke();
+		if (connection is not null)
 		{
-			// TODO: If this ever gets more than a few options, should probably colocate help with the defintion. Attributes?
-			ImGui.Text("/bw config");
-			ImGui.Text("Open this configuration window.");
+			string state = connection.IsReachable switch
+			{
+				true => "Connected",
+				false => "Not reachable",
+				_ => "Checking",
+			};
+			ImGui.Text($"T3 Code: {state} — {connection.Url}");
+			if (connection.IsReachable == false)
+			{
+				ImGui.TextWrapped("Start T3 Code, or select the T3 Code overlay on the left and correct its URL.");
+				if (ImGui.Button("Retry connection")) RetryT3Connection?.Invoke();
+			}
+		}
+
+		ImGui.Dummy(new Vector2(0, 8));
+		ImGui.Separator();
+		ImGui.Text("Window behaviour");
+		dirty |= ImGui.Checkbox("Animate opening and closing", ref Config.AnimateVisibility);
+		dirty |= ImGui.Checkbox("Dim when inactive", ref Config.DimWhenInactive);
+
+		if (!Config.DimWhenInactive) ImGui.BeginDisabled();
+		if (ImGui.SliderFloat("Idle opacity", ref Config.IdleOpacity, 10f, 90f, "%.0f%%"))
+		{
+			Config.IdleOpacity = Math.Clamp(Config.IdleOpacity, 10f, 90f);
+			dirty = true;
+		}
+		if (!Config.DimWhenInactive) ImGui.EndDisabled();
+		ImGui.TextWrapped("T3 stays solid while hovered or focused, then dims after you click back into the game.");
+
+		ImGui.Dummy(new Vector2(0, 8));
+		ImGui.Separator();
+		ImGui.Text("Thread notifications");
+		if (ImGui.InputTextWithHint("T3 data directory", "Automatic", ref Config.T3DataDirectory, 1000))
+		{
+			dirty = true;
+		}
+		if (ImGui.IsItemDeactivatedAfterEdit())
+		{
+			T3DataDirectoryChanged?.Invoke(this, Config.T3DataDirectory);
+		}
+		string? databasePath = T3DatabasePathProvider?.Invoke();
+		ImGui.TextWrapped(databasePath is null
+			? "T3 thread database not found. The overlay still works; set the folder containing state.sqlite if you want notification badges."
+			: $"Using: {databasePath}");
+
+		if (ImGui.CollapsingHeader("Commands"))
+		{
+			ImGui.Text("/t3");
+			ImGui.TextWrapped("Show or hide the T3 Code window.");
 			ImGui.Dummy(new Vector2(0, 5));
-			ImGui.Text("/bw overlay [overlayCommandName] [setting] [value]");
-			ImGui.TextWrapped(
-				"Change a setting for an overlay.\n" +
-				"\toverlayCommandName: The overlay to edit. Use the 'Command Name' shown in its config.\n" +
-				"\tsetting: Value to change. Accepted settings are:\n" +
-				"\t\turl: string\n" +
-				"\t\tdisabled: boolean\n" +
-				"\t\tmuted: boolean\n" +
-				"\t\tact: boolean\n" +
-				"\t\tlocked: boolean\n" +
-				"\t\thidden: boolean\n" +
-				"\t\ttypethrough: boolean\n" +
-				"\t\tclickthrough: boolean\n" +
-				"\t\tfullscreen: boolean\n" +
-				"\t\treload: -\n" +
-				"\tvalue: Value to set for the setting. Accepted values are:\n" +
-				"\t\tstring: any string value\n\t\tboolean: on, off, toggle");
+			ImGui.Text("/t3 show");
+			ImGui.TextWrapped("Show the T3 Code window.");
+			ImGui.Dummy(new Vector2(0, 5));
+			ImGui.Text("/t3 config");
+			ImGui.TextWrapped("Open this configuration window.");
 		}
 
 		return dirty;
@@ -358,13 +395,7 @@ internal class Settings : IDisposable
 		bool dirty = false;
 
 		ImGui.PushID(overlayConfig.Guid.ToString());
-
-		dirty |= ImGui.InputText("Name", ref overlayConfig.Name, 100);
-
-		ImGui.PushStyleVar(ImGuiStyleVar.Alpha, 0.5f);
-		string? commandName = GetOverlayCommandName(overlayConfig);
-		ImGui.InputText("Command Name", ref commandName, 100);
-		ImGui.PopStyleVar();
+		ImGui.Text("T3 Code browser");
 
 		dirty |= ImGui.InputText("URL", ref overlayConfig.Url, 1000);
 		if (ImGui.IsItemDeactivatedAfterEdit()) { NavigateOverlay(overlayConfig); }
@@ -422,115 +453,17 @@ internal class Settings : IDisposable
 			OverlayAdded?.Invoke(this, overlayConfig);
 		}
 
-		ImGui.SetNextItemWidth(100);
-		ImGui.Columns(2, "boolInlayOptions", false);
-
-		if (ImGui.Checkbox("Disabled", ref overlayConfig.Disabled))
-		{
-			if (overlayConfig.Disabled)
-				OverlayRemoved?.Invoke(this, overlayConfig);
-			else
-				OverlayAdded?.Invoke(this, overlayConfig);
-			dirty = true;
-		}
-
-		if (ImGui.IsItemHovered()) { ImGui.SetTooltip("Disables the overlay. Contrary to just hiding it this setting will stop it from ever being created."); }
-
-		ImGui.NextColumn();
-		ImGui.NextColumn();
-
-
 		if (ImGui.Checkbox("Muted", ref overlayConfig.Muted))
 		{
 			UpdateMuteOverlay(overlayConfig);
 			dirty = true;
 		}
-
-		if (ImGui.IsItemHovered()) { ImGui.SetTooltip("Enables or disables audio playback."); }
-
-		ImGui.NextColumn();
-
-		if (ImGui.Checkbox("ACT/IINACT optimizations", ref overlayConfig.ActOptimizations))
-		{
-			if (!overlayConfig.Disabled)
-			{
-				if (overlayConfig.ActOptimizations)
-				{
-					if (!_actAvailable)
-						OverlayRemoved?.Invoke(this, overlayConfig);
-					else
-						OverlayAdded?.Invoke(this, overlayConfig);
-				}
-				else
-				{
-					OverlayAdded?.Invoke(this, overlayConfig);
-				}
-			}
-
-			dirty = true;
-		}
-
-		if (ImGui.IsItemHovered()) { ImGui.SetTooltip("Enables ACT/IINACT specific optimizations. This will automatically disable the overlay if ACT/IINACT is not running.\n\nNOTE: This does NOT disable the overlay if the websocket is not reporting data."); }
-
-		ImGui.NextColumn();
-
-		if (overlayConfig.ClickThrough || overlayConfig.Fullscreen) { ImGui.PushStyleVar(ImGuiStyleVar.Alpha, 0.5f); }
-
-		bool true_ = true;
-		bool implicit_ = overlayConfig.ClickThrough || overlayConfig.Fullscreen;
-		dirty |= ImGui.Checkbox("Locked", ref implicit_ ? ref true_ : ref overlayConfig.Locked);
-		if (overlayConfig.ClickThrough) { ImGui.PopStyleVar(); }
-
-		if (ImGui.IsItemHovered()) { ImGui.SetTooltip("Prevent the overlay from being resized or moved. This is implicitly set by Click Through and Fullscreen."); }
-
-		ImGui.NextColumn();
-
+		ImGui.SameLine();
 		dirty |= ImGui.Checkbox("Hidden", ref overlayConfig.Hidden);
-		if (ImGui.IsItemHovered()) { ImGui.SetTooltip("Hide the overlay. This does not stop the overlay from executing, only from being displayed."); }
-
-		ImGui.NextColumn();
-
-		if (overlayConfig.ClickThrough) { ImGui.PushStyleVar(ImGuiStyleVar.Alpha, 0.5f); }
-
-		dirty |= ImGui.Checkbox("Type Through", ref overlayConfig.ClickThrough ? ref true_ : ref overlayConfig.TypeThrough);
-		if (overlayConfig.ClickThrough || overlayConfig.Fullscreen) { ImGui.PopStyleVar(); }
-
-		if (ImGui.IsItemHovered()) { ImGui.SetTooltip("Prevent the overlay from intercepting any keyboard events. Implicitly set by Click Through."); }
-
-		ImGui.NextColumn();
-
-		dirty |= ImGui.Checkbox("Click Through", ref overlayConfig.ClickThrough);
-		if (ImGui.IsItemHovered()) { ImGui.SetTooltip("Prevent the overlay from intercepting any mouse events. Implicitly sets Locked and Type Through."); }
-
-		ImGui.NextColumn();
-
-		dirty |= ImGui.Checkbox("Hide out of combat", ref overlayConfig.HideOutOfCombat);
-		if (ImGui.IsItemHovered()) { ImGui.SetTooltip("Hide this overlay when out-of-combat."); }
-
-		ImGui.NextColumn();
-
-		dirty |= ImGui.Checkbox("Hide in PvP", ref overlayConfig.HideInPvP);
-		if (ImGui.IsItemHovered()) { ImGui.SetTooltip("Hide this overlay when in a PvP area."); }
-
-		ImGui.NextColumn();
-
-		if (!overlayConfig.HideOutOfCombat) { ImGui.PushStyleVar(ImGuiStyleVar.Alpha, 0.5f); }
-
-		dirty |= ImGui.InputInt("Hide Delay", ref overlayConfig.HideDelay);
-		if (ImGui.IsItemHovered()) { ImGui.SetTooltip("Delay to hide overlay when out-of-combat in seconds."); }
-
-		if (!overlayConfig.HideOutOfCombat) { ImGui.PopStyleVar(); }
-
-		ImGui.Columns(1);
 
 		ImGui.NewLine();
-		if (ImGui.CollapsingHeader("Experimental / Unsupported"))
+		if (ImGui.CollapsingHeader("Advanced"))
 		{
-			ImGui.NewLine();
-			dirty |= ImGui.Checkbox("Fullscreen", ref overlayConfig.Fullscreen);
-			ImGui.NewLine();
-			if (ImGui.IsItemHovered()) { ImGui.SetTooltip("Automatically makes this overlay cover the entire screen when enabled."); }
-
 			ImGui.Text("Custom CSS code:");
 			if (ImGui.InputTextMultiline("Custom CSS code", ref overlayConfig.CustomCss, 1000000,
 				    new Vector2(-1, ImGui.GetTextLineHeight() * 10)))

@@ -2,5 +2,6 @@
 bin/
 obj/
 out/
+site/
 packages/
 *.sln.DotSettings.user

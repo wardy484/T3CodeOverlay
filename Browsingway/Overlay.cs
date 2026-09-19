@@ -9,7 +9,12 @@ namespace Browsingway;
 
 internal class Overlay : IDisposable
 {
+	private const float WindowCornerRadius = 16f;
+	private const float VisibilityAnimationSeconds = 0.28f;
+	private const float InteractionFadeSeconds = 0.16f;
+
 	private readonly InlayConfiguration _overlayConfig;
+	private readonly Configuration _pluginConfig;
 
 	private readonly RenderProcess _renderProcess;
 	private bool _captureCursor;
@@ -23,10 +28,18 @@ internal class Overlay : IDisposable
 	private SharedTextureHandler? _textureHandler;
 	private Exception? _textureRenderException;
 	private bool _windowFocused;
+	private bool _windowHovered;
+	private bool _bubbleHovered;
+	private bool _bubbleFocused;
+	private float _interactionOpacity;
+	private Vector2? _bubbleAnchor;
+	private float _bubbleSize;
+	private Vector2 _windowSize;
 	private long _timeLastInCombat;
 	private ISharedImmediateTexture? _texErrorIcon;
+	private float _visibilityProgress;
 
-	public Overlay(RenderProcess renderProcess, InlayConfiguration overlayConfig, string pluginDir)
+	public Overlay(RenderProcess renderProcess, InlayConfiguration overlayConfig, Configuration pluginConfig, string pluginDir)
 	{
 		_renderProcess = renderProcess;
 		// TODO: handle that the correct way
@@ -37,10 +50,29 @@ internal class Overlay : IDisposable
 		};
 
 		_overlayConfig = overlayConfig;
+		_pluginConfig = pluginConfig;
+		_visibilityProgress = overlayConfig.Hidden ? 0f : 1f;
+		_interactionOpacity = GetIdleOpacity();
 		_texErrorIcon = Services.TextureProvider.GetFromFile(Path.Combine(pluginDir, "dead.png"));
 	}
 
 	public Guid RenderGuid => _overlayConfig.Guid;
+
+	public void SetBubbleAnchor(Vector2? position, float bubbleSize)
+	{
+		_bubbleAnchor = position;
+		_bubbleSize = bubbleSize;
+	}
+
+	public void SetBubbleHovered(bool hovered)
+	{
+		_bubbleHovered = hovered;
+	}
+
+	public void FocusFromBubble()
+	{
+		_bubbleFocused = true;
+	}
 
 	public void Dispose()
 	{
@@ -85,6 +117,7 @@ internal class Overlay : IDisposable
 		{
 			// this message is only generated when someone clicked on an non ImGui window, meaning we want to loose focus here
 			_windowFocused = false;
+			_bubbleFocused = false;
 		}
 
 		// Bail if we're not focused or we're typethrough
@@ -113,15 +146,45 @@ internal class Overlay : IDisposable
 
 	public void Render()
 	{
-		if (_overlayConfig.Hidden || _overlayConfig.Disabled || HiddenByCombatFlags() ||
+		if (_overlayConfig.Disabled || HiddenByCombatFlags() ||
 		    (_overlayConfig.HideInPvP && Services.ClientState.IsPvP))
 		{
 			_mouseInWindow = false;
+			_windowHovered = false;
 			return;
 		}
 
-		ImGui.SetNextWindowSize(new Vector2(640, 480), ImGuiCond.FirstUseEver);
-		ImGui.Begin($"{_overlayConfig.Name}###{_overlayConfig.Guid}", GetWindowFlags());
+		UpdateVisibilityAnimation();
+		if (_visibilityProgress <= 0f)
+		{
+			_mouseInWindow = false;
+			_windowHovered = false;
+			return;
+		}
+
+		float visibility = SmoothStep(_visibilityProgress);
+		UpdateInteractionOpacity();
+
+		ImGui.SetNextWindowSize(new Vector2(960, 720), ImGuiCond.FirstUseEver);
+		if (_bubbleAnchor is { } bubblePosition && !_overlayConfig.Fullscreen)
+		{
+			ImGui.SetNextWindowPos(GetAnchoredPosition(bubblePosition), ImGuiCond.Always);
+		}
+		float cornerRadius = _overlayConfig.Fullscreen ? 0f : WindowCornerRadius;
+		float fade = Math.Clamp(visibility / 0.16f, 0f, 1f);
+		float interactionOpacity = _overlayConfig.Fullscreen ? 1f : _interactionOpacity;
+		ImGui.PushStyleVar(ImGuiStyleVar.Alpha, fade * interactionOpacity * (_overlayConfig.Opacity / 100f));
+		ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, cornerRadius);
+		ImGui.Begin($"{_overlayConfig.Name}###{_overlayConfig.Guid}", GetWindowFlags(_visibilityProgress < 1f));
+		ImGui.PopStyleVar(1);
+		_windowSize = ImGui.GetWindowSize();
+		Vector2 mousePosition = ImGui.GetIO().MousePos;
+		Vector2 windowPosition = ImGui.GetWindowPos();
+		_windowHovered = !_overlayConfig.ClickThrough
+		                 && mousePosition.X >= windowPosition.X
+		                 && mousePosition.Y >= windowPosition.Y
+		                 && mousePosition.X < windowPosition.X + _windowSize.X
+		                 && mousePosition.Y < windowPosition.Y + _windowSize.Y;
 
 		if (_overlayConfig.Fullscreen)
 		{
@@ -149,9 +212,10 @@ internal class Overlay : IDisposable
 		{
 			HandleMouseEvent();
 
-			ImGui.PushStyleVar(ImGuiStyleVar.Alpha, _overlayConfig.Opacity / 100f);
-			_textureHandler.Render();
-			ImGui.PopStyleVar();
+			Vector2? animationTarget = _bubbleAnchor is { } anchor && !_overlayConfig.Fullscreen
+				? anchor + new Vector2(_bubbleSize / 2f)
+				: null;
+			_textureHandler.Render(cornerRadius, animationTarget, _visibilityProgress);
 		}
 		else
 		{
@@ -179,9 +243,60 @@ internal class Overlay : IDisposable
 		}
 
 		ImGui.End();
+		ImGui.PopStyleVar();
 	}
 
-	private ImGuiWindowFlags GetWindowFlags()
+	private void UpdateVisibilityAnimation()
+	{
+		if (!_pluginConfig.AnimateVisibility)
+		{
+			_visibilityProgress = _overlayConfig.Hidden ? 0f : 1f;
+			return;
+		}
+
+		float direction = _overlayConfig.Hidden ? -1f : 1f;
+		_visibilityProgress = Math.Clamp(
+			_visibilityProgress + direction * ImGui.GetIO().DeltaTime / VisibilityAnimationSeconds,
+			0f,
+			1f);
+	}
+
+	private void UpdateInteractionOpacity()
+	{
+		float idleOpacity = GetIdleOpacity();
+		float target = !_pluginConfig.DimWhenInactive || _windowFocused || _windowHovered || _bubbleHovered || _bubbleFocused
+			? 1f
+			: idleOpacity;
+		float step = (1f - idleOpacity) * ImGui.GetIO().DeltaTime / InteractionFadeSeconds;
+		_interactionOpacity = target > _interactionOpacity
+			? MathF.Min(target, _interactionOpacity + step)
+			: MathF.Max(target, _interactionOpacity - step);
+	}
+
+	private float GetIdleOpacity() => Math.Clamp(_pluginConfig.IdleOpacity / 100f, 0.1f, 1f);
+
+	private static float SmoothStep(float value) => value * value * (3f - 2f * value);
+
+	private Vector2 GetAnchoredPosition(Vector2 bubblePosition)
+	{
+		const float gap = 10f;
+		Vector2 panelSize = _windowSize == Vector2.Zero ? new Vector2(960, 720) : _windowSize;
+		ImGuiViewportPtr viewport = ImGui.GetMainViewport();
+		Vector2 workMin = viewport.WorkPos;
+		Vector2 workMax = viewport.WorkPos + viewport.WorkSize;
+		float bubbleCentre = bubblePosition.X + _bubbleSize / 2f;
+		float screenCentre = workMin.X + viewport.WorkSize.X / 2f;
+		float x = bubbleCentre > screenCentre
+			? bubblePosition.X - panelSize.X - gap
+			: bubblePosition.X + _bubbleSize + gap;
+		float y = bubblePosition.Y - 14f;
+
+		return new Vector2(
+			Math.Clamp(x, workMin.X, Math.Max(workMin.X, workMax.X - panelSize.X)),
+			Math.Clamp(y, workMin.Y, Math.Max(workMin.Y, workMax.Y - panelSize.Y)));
+	}
+
+	private ImGuiWindowFlags GetWindowFlags(bool animating = false)
 	{
 		ImGuiWindowFlags flags = ImGuiWindowFlags.None
 		                         | ImGuiWindowFlags.NoTitleBar
@@ -205,6 +320,11 @@ internal class Overlay : IDisposable
 		if (_overlayConfig.ClickThrough || (!_captureCursor && locked))
 		{
 			flags |= ImGuiWindowFlags.NoMouseInputs | ImGuiWindowFlags.NoNav;
+		}
+
+		if (animating)
+		{
+			flags |= ImGuiWindowFlags.NoMouseInputs | ImGuiWindowFlags.NoBackground;
 		}
 
 		// don't think user wants a background when they decrease opacity
@@ -256,7 +376,8 @@ internal class Overlay : IDisposable
 		float wheelY = io.MouseWheel;
 		if (down.HasFlag(MouseButton.Primary) || down.HasFlag(MouseButton.Secondary) || down.HasFlag(MouseButton.Tertiary))
 		{
-			_windowFocused = _mouseInWindow;
+			_windowFocused = hovered;
+			if (hovered) _bubbleFocused = false;
 		}
 
 		// If the cursor is outside the window, send a final mouse leave then noop

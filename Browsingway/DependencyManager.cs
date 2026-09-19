@@ -210,7 +210,7 @@ public class DependencyManager : IDisposable
 
 		ImGui.SetNextWindowSize(new Vector2(1300, 350), ImGuiCond.Always);
 		ImGuiWindowFlags windowFlags = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize;
-		ImGui.Begin("Browsingway dependencies", windowFlags);
+		ImGui.Begin("T3 Code Overlay dependencies", windowFlags);
 		if (_texIcon is not null)
 			ImGui.Image(_texIcon.GetWrapOrEmpty().Handle, new Vector2(256, 256));
 
@@ -218,9 +218,9 @@ public class DependencyManager : IDisposable
 
 		string version = _missingDependencies?.First()?.Version ?? "???";
 		string checksum = _missingDependencies?.First()?.Checksum ?? "???";
-		ImGui.Text("Browsingway requires additional dependencies to function.\n" +
+		ImGui.Text("T3 Code Overlay requires Chromium dependencies to function.\n" +
 		           "These are not shipped with the plugin due to their size.\n\n" +
-		           "The files are hosted on GitHub and are verified with SHA256 checksums:\n" +
+		           "They are supplied by the Browsingway project and verified with SHA256 checksums:\n" +
 		           "https://github.com/Styr1x/Browsingway/releases/tag/cef-binaries\n\n" +
 		           "CefSharp: " + version + "\n" +
 		           "SHA256: " + checksum

@@ -1,6 +1,7 @@
 ﻿using Browsingway.Common;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
+using Dalamud.Interface.Textures;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
@@ -13,17 +14,25 @@ namespace Browsingway;
 
 public class Plugin : IDalamudPlugin
 {
-	private const string _command = "/bw";
+	private const string _command = "/t3";
 
 	private readonly DependencyManager _dependencyManager;
 	private readonly Dictionary<Guid, Overlay> _overlays = new();
+	private readonly WindowSystem _windowSystem = new("T3CodeOverlay");
 	private readonly string _pluginConfigDir;
 	private readonly string _pluginDir;
+	private readonly ISharedImmediateTexture _bubbleIcon;
+	private T3StatusMonitor? _statusMonitor;
+	private T3ConnectionMonitor? _connectionMonitor;
 
 	private RenderProcess? _renderProcess;
 	private ActHandler _actHandler;
 	private Settings? _settings;
 	private Services _services;
+	private bool _bubbleDragging;
+	private bool _bubbleHovered;
+	private const float BubbleWindowSize = 64f;
+	private const float BubbleIconSize = 52f;
 
 	public Plugin(IDalamudPluginInterface pluginInterface)
 	{
@@ -37,6 +46,7 @@ public class Plugin : IDalamudPlugin
 		}
 
 		_pluginConfigDir = pluginInterface.GetPluginConfigDirectory();
+		_bubbleIcon = Services.TextureProvider.GetFromFile(Path.Combine(_pluginDir, "t3code.png"));
 
 		_actHandler = new ActHandler();
 
@@ -50,7 +60,7 @@ public class Plugin : IDalamudPlugin
 
 	// Required for LivePluginLoader support
 	public string AssemblyLocation { get; } = Assembly.GetExecutingAssembly().Location;
-	public string Name => "Browsingway";
+	public string Name => "T3 Code Overlay";
 
 	public void Dispose()
 	{
@@ -61,6 +71,9 @@ public class Plugin : IDalamudPlugin
 		_renderProcess?.Dispose();
 
 		_settings?.Dispose();
+		_windowSystem.RemoveAllWindows();
+		_statusMonitor?.Dispose();
+		_connectionMonitor?.Dispose();
 
 		Services.CommandManager.RemoveHandler(_command);
 
@@ -87,7 +100,7 @@ public class Plugin : IDalamudPlugin
 		{
 			if (!msg.HasDxSharedTexturesSupport)
 			{
-				Services.PluginLog.Error("Could not initialize shared textures transport. Browsingway will not work.");
+				Services.PluginLog.Error("Could not initialize shared textures transport. T3 Code Overlay will not work.");
 				return;
 			}
 
@@ -127,6 +140,16 @@ public class Plugin : IDalamudPlugin
 
 		// Prep settings
 		_settings = new Settings();
+		_windowSystem.AddWindow(_settings);
+		_statusMonitor = new T3StatusMonitor(
+			_pluginConfigDir,
+			_settings.Config.T3DataDirectory,
+			_settings.LastAcknowledgedT3ActivityAt);
+		_settings.T3DatabasePathProvider = () => _statusMonitor.DatabasePath;
+		_settings.T3DataDirectoryChanged += (_, path) => _statusMonitor.SetDataDirectory(path);
+		_connectionMonitor = new T3ConnectionMonitor(_settings.PrimaryOverlay?.Url ?? "http://127.0.0.1:3773");
+		_settings.T3ConnectionStatusProvider = () => _connectionMonitor.Status;
+		_settings.RetryT3Connection = _connectionMonitor.Retry;
 		if (_settings is not null)
 		{
 			_settings.OverlayAdded += OnOverlayAdded;
@@ -141,7 +164,7 @@ public class Plugin : IDalamudPlugin
 
 		// Hook up the main BW command
 		Services.CommandManager.AddHandler(_command,
-			new CommandInfo(HandleCommand) {HelpMessage = "Control Browsingway from the chat line! Type '/bw config' or open the settings for more info.", ShowInHelp = true});
+			new CommandInfo(HandleCommand) {HelpMessage = "Open T3 Code in-game. Use '/t3', '/t3 show', or '/t3 config'.", ShowInHelp = true});
 	}
 
 	private (bool, long) OnWndProc(WindowsMessage msg, ulong wParam, long lParam)
@@ -164,7 +187,7 @@ public class Plugin : IDalamudPlugin
 			return;
 		}
 
-		Overlay overlay = new(_renderProcess, overlayConfig, _pluginDir);
+		Overlay overlay = new(_renderProcess, overlayConfig, _settings.Config, _pluginDir);
 		_overlays.TryAdd(overlayConfig.Guid, overlay);
 	}
 
@@ -172,6 +195,8 @@ public class Plugin : IDalamudPlugin
 	{
 		if (_overlays.TryGetValue(config.Guid, out var overlay))
 			overlay.Navigate(config.Url);
+		if (_settings?.PrimaryOverlay?.Guid == config.Guid)
+			_connectionMonitor?.SetUrl(config.Url);
 	}
 
 	private void OnOverlayDebugged(object? sender, InlayConfiguration config)
@@ -209,16 +234,170 @@ public class Plugin : IDalamudPlugin
 	private void Render()
 	{
 		_dependencyManager.Render();
-		_settings?.Render();
+		_windowSystem.Draw();
 
 		ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(0, 0));
 
 		_renderProcess?.EnsureRenderProcessIsAlive();
 		_actHandler.Check();
 
-		foreach (Overlay overlay in _overlays.Values) { overlay.Render(); }
+		InlayConfiguration? primaryOverlay = _settings?.PrimaryOverlay;
+		Vector2? bubblePosition = GetBubblePosition();
+		foreach (Overlay overlay in _overlays.Values)
+		{
+			bool attachToBubble = _settings?.Config.ShowBubble == true && primaryOverlay?.Guid == overlay.RenderGuid;
+			overlay.SetBubbleAnchor(attachToBubble ? bubblePosition : null, BubbleWindowSize);
+			overlay.SetBubbleHovered(attachToBubble && _bubbleHovered);
+			overlay.Render();
+		}
 
 		ImGui.PopStyleVar();
+		RenderBubble();
+	}
+
+	private void RenderBubble()
+	{
+		if (_settings is null || !_settings.Config.ShowBubble) return;
+		InlayConfiguration? primaryOverlay = _settings.PrimaryOverlay;
+		if (primaryOverlay is null) return;
+
+		Vector2 bubblePosition = GetBubblePosition()!.Value;
+		ImGui.SetNextWindowPos(bubblePosition, ImGuiCond.Always);
+		ImGui.SetNextWindowSize(new Vector2(BubbleWindowSize, BubbleWindowSize), ImGuiCond.Always);
+		ImGui.SetNextWindowBgAlpha(0f);
+		ImGuiWindowFlags flags = ImGuiWindowFlags.NoDecoration
+		                         | ImGuiWindowFlags.NoScrollbar
+		                         | ImGuiWindowFlags.NoScrollWithMouse
+		                         | ImGuiWindowFlags.NoDocking
+		                         | ImGuiWindowFlags.NoNav;
+
+		ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+
+		ImGui.Begin("T3 Code###T3CodeBubble", flags);
+		Vector2 iconMin = ImGui.GetWindowPos() + new Vector2(4f, 4f);
+		Vector2 iconMax = iconMin + new Vector2(BubbleIconSize, BubbleIconSize);
+		ImGui.SetCursorPos(new Vector2(4f, 4f));
+		bool clicked = ImGui.InvisibleButton("##T3CodeBubbleButton", new Vector2(BubbleIconSize, BubbleIconSize));
+		bool hovered = ImGui.IsItemHovered();
+		_bubbleHovered = hovered;
+		ImDrawListPtr drawList = ImGui.GetWindowDrawList();
+		drawList.AddImageRounded(
+			_bubbleIcon.GetWrapOrEmpty().Handle,
+			iconMin,
+			iconMax,
+			Vector2.Zero,
+			Vector2.One,
+			0xFFFFFFFF,
+			15f);
+		if (hovered || _bubbleDragging)
+		{
+			drawList.AddRect(iconMin - Vector2.One, iconMax + Vector2.One, 0xFFD8C6FF, 16f, ImDrawFlags.None, 2f);
+		}
+		if (ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Left, 4f))
+		{
+			_bubbleDragging = true;
+		}
+
+		if (_bubbleDragging && ImGui.IsMouseDown(ImGuiMouseButton.Left))
+		{
+			bubblePosition = ClampBubblePosition(bubblePosition + ImGui.GetIO().MouseDelta);
+			_settings.SetBubblePosition(bubblePosition, false);
+			ImGui.SetWindowPos(bubblePosition, ImGuiCond.Always);
+		}
+
+		if (clicked && !_bubbleDragging)
+		{
+			bool opening = primaryOverlay.Hidden;
+			if (opening && _connectionMonitor?.Status.IsReachable == false)
+			{
+				Services.Chat.PrintError($"T3 Code is not reachable at {primaryOverlay.Url}. Start T3 Code or check /t3 config.");
+			}
+			if (opening && _statusMonitor is not null)
+			{
+				_statusMonitor.Acknowledge(_settings.AcknowledgeT3Activity());
+			}
+			_settings.TogglePrimaryOverlay();
+			if (opening && _overlays.TryGetValue(primaryOverlay.Guid, out Overlay? overlay))
+			{
+				overlay.FocusFromBubble();
+			}
+		}
+
+		if (_bubbleDragging && ImGui.IsMouseReleased(ImGuiMouseButton.Left))
+		{
+			_bubbleDragging = false;
+			_settings.SetBubblePosition(bubblePosition, true);
+		}
+		T3ThreadStatus status = _statusMonitor?.Status ?? T3ThreadStatus.Empty;
+		RenderStatusBadges(drawList, iconMin, iconMax, status);
+		if (hovered)
+		{
+			ImGui.SetTooltip(BuildBubbleTooltip(primaryOverlay.Hidden, status, _connectionMonitor?.Status));
+		}
+		ImGui.End();
+
+		ImGui.PopStyleVar();
+	}
+
+	private static void RenderStatusBadges(ImDrawListPtr drawList, Vector2 iconMin, Vector2 iconMax, T3ThreadStatus status)
+	{
+		if (status.Working > 0)
+		{
+			DrawBadge(drawList, new Vector2(iconMin.X + 9f, iconMax.Y - 5f), status.Working, 0xFFF59E0B);
+		}
+
+		if (status.NeedsAttention > 0)
+		{
+			uint color = status.DirectAttention > 0 || status.Failed > 0 ? 0xFF4F46E5 : 0xFF22C55E;
+			DrawBadge(drawList, new Vector2(iconMax.X - 5f, iconMin.Y + 9f), status.NeedsAttention, color);
+		}
+	}
+
+	private static void DrawBadge(ImDrawListPtr drawList, Vector2 centre, int count, uint color)
+	{
+		const float radius = 10f;
+		string label = count > 99 ? "99+" : count.ToString();
+		drawList.AddCircleFilled(centre, radius + 2f, 0xF2181622);
+		drawList.AddCircleFilled(centre, radius, color);
+		Vector2 textSize = ImGui.CalcTextSize(label);
+		drawList.AddText(centre - textSize / 2f, 0xFFFFFFFF, label);
+	}
+
+	private static string BuildBubbleTooltip(bool hidden, T3ThreadStatus status, T3ConnectionStatus? connection)
+	{
+		List<string> details = new();
+		if (connection?.IsReachable == false) details.Add("T3 Code is not reachable");
+		if (status.Working > 0) details.Add($"{status.Working} working");
+		if (status.DirectAttention > 0) details.Add($"{status.DirectAttention} awaiting you");
+		if (status.Completed > 0) details.Add($"{status.Completed} completed");
+		if (status.Failed > 0) details.Add($"{status.Failed} failed");
+		string action = hidden ? "Open T3 Code" : "Hide T3 Code";
+		return details.Count == 0 ? action : $"{action}\n{string.Join("  •  ", details)}";
+	}
+
+	private Vector2? GetBubblePosition()
+	{
+		if (_settings is null || !_settings.Config.ShowBubble) return null;
+
+		Vector2 position = new(_settings.Config.BubbleX, _settings.Config.BubbleY);
+		if (position.X < 0f || position.Y < 0f)
+		{
+			ImGuiViewportPtr viewport = ImGui.GetMainViewport();
+			position = new Vector2(
+				viewport.WorkPos.X + viewport.WorkSize.X - BubbleWindowSize - 24f,
+				viewport.WorkPos.Y + viewport.WorkSize.Y / 2f - BubbleWindowSize / 2f);
+			_settings.SetBubblePosition(position, true);
+		}
+
+		return ClampBubblePosition(position);
+	}
+
+	private static Vector2 ClampBubblePosition(Vector2 position)
+	{
+		ImGuiViewportPtr viewport = ImGui.GetMainViewport();
+		Vector2 min = viewport.WorkPos;
+		Vector2 max = viewport.WorkPos + viewport.WorkSize - new Vector2(BubbleWindowSize, BubbleWindowSize);
+		return Vector2.Clamp(position, min, max);
 	}
 
 	private void HandleCommand(string command, string rawArgs)
@@ -229,8 +408,7 @@ public class Plugin : IDalamudPlugin
 
 		if (args.Length == 0)
 		{
-			Services.Chat.PrintError(
-				"No subcommand specified. Valid subcommands are: config,overlay.");
+			_settings?.TogglePrimaryOverlay();
 			return;
 		}
 
@@ -238,6 +416,12 @@ public class Plugin : IDalamudPlugin
 
 		switch (args[0])
 		{
+			case "show":
+				_settings?.ShowPrimaryOverlay();
+				break;
+			case "toggle":
+				_settings?.TogglePrimaryOverlay();
+				break;
 			case "config":
 				_settings?.HandleConfigCommand(subcommandArgs);
 				break;
@@ -249,7 +433,7 @@ public class Plugin : IDalamudPlugin
 				break;
 			default:
 				Services.Chat.PrintError(
-					$"Unknown subcommand '{args[0]}'. Valid subcommands are: config,overlay,inlay.");
+					$"Unknown subcommand '{args[0]}'. Valid subcommands are: show,toggle,config,overlay.");
 				break;
 		}
 	}

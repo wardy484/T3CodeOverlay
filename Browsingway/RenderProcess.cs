@@ -36,8 +36,9 @@ internal class RenderProcess : IDisposable
 		IPluginLog pluginLog
 	)
 	{
-		_keepAliveHandleName = $"BrowsingwayRendererKeepAlive{pid}";
-		_ipcChannelName = $"BrowsingwayRendererIpcChannel{pid}";
+		string instanceId = $"{pid}-{Guid.NewGuid():N}";
+		_keepAliveHandleName = $"T3CodeOverlayRendererKeepAlive-{instanceId}";
+		_ipcChannelName = $"T3CodeOverlayRendererIpcChannel-{instanceId}";
 		_dependencyManager = dependencyManager;
 		_pluginDir = pluginDir;
 		_configDir = configDir;
@@ -100,7 +101,7 @@ internal class RenderProcess : IDisposable
 
 		if (_restartCount >= _maxRestarts)
 		{
-			Services.PluginLog.Error("Render process is crashing in a loop - please check the logs. No further restarts will be attempted until Browsingway is restarted.");
+			Services.PluginLog.Error("Render process is crashing in a loop - please check the logs. No further restarts will be attempted until T3 Code Overlay is restarted.");
 			Stop();
 			Rpc?.Dispose();
 			Rpc = null;

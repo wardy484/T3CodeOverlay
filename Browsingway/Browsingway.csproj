@@ -8,8 +8,17 @@
 		<Platforms>x64</Platforms>
 		<ProduceReferenceAssembly>false</ProduceReferenceAssembly>
 		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<LangVersion>latestmajor</LangVersion>
-		<Version>1.7.2.0</Version>
+		<Version>0.1.0.0</Version>
+		<AssemblyName>T3CodeOverlay</AssemblyName>
+		<RootNamespace>Browsingway</RootNamespace>
+		<Authors>Kim Ward</Authors>
+		<RepositoryUrl>https://github.com/wardy484/T3CodeOverlay</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<Deterministic>true</Deterministic>
+		<ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
 		<OutputPath>..\out</OutputPath>
 		<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 	</PropertyGroup>
@@ -22,7 +31,8 @@
 	</ItemGroup>
 	
 	<ItemGroup>
-		<PackageReference Include="SharedMemory" Version="2.3.2" />
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+        <PackageReference Include="SharedMemory" Version="2.3.2" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -31,14 +41,20 @@
 	</ItemGroup>
 	
 	<ItemGroup>
-		<Content Include="Browsingway.json">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</Content>
 		<Content Include="images\icon.png">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>icon.png</TargetPath>
+		</Content>
+		<Content Include="T3CodeOverlay.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+		<Content Include="images\t3code.png">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>t3code.png</TargetPath>
 		</Content>
         <Content Include="images\dead.png">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>dead.png</TargetPath>
         </Content>
 	</ItemGroup>
 	
