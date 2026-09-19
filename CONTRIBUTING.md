@@ -1,6 +1,8 @@
 # Contributing
 
-Thanks for helping make T3 Code Overlay better.
+Thanks for helping make T3 Linkpearl better.
+
+Please read [AGENTS.md](AGENTS.md) before using a coding agent in this repository. The repo-local `t3-linkpearl` skill gives compatible agents the build and release workflow.
 
 ## Set up
 
@@ -13,8 +15,8 @@ Thanks for helping make T3 Code Overlay better.
    dotnet build Browsingway/Browsingway.csproj -c Release --no-restore -p:Platform=x64
    ```
 
-4. Add the absolute path to `out/T3CodeOverlay.dll` under `/xlsettings` → **Experimental** → **Dev Plugin Locations**.
-5. Enable **T3 Code Overlay** under `/xlplugins` → **Dev Tools**.
+4. Add the absolute path to `out/T3Linkpearl.dll` under `/xlsettings` → **Experimental** → **Dev Plugin Locations**.
+5. Enable **T3 Linkpearl** under `/xlplugins` → **Dev Tools**.
 
 On Windows, Dalamud is expected at `%APPDATA%\XIVLauncher\addon\Hooks\dev`. Set `DALAMUD_HOME` when it lives elsewhere.
 

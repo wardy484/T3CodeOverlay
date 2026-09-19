@@ -1,5 +1,5 @@
 param(
-    [string]$PackagePath = "out/T3CodeOverlay/latest.zip"
+    [string]$PackagePath = "out/T3Linkpearl/latest.zip"
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,8 +14,8 @@ $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $PackagePath)
 try {
     $entries = @($archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
     $required = @(
-        "T3CodeOverlay.dll",
-        "T3CodeOverlay.json",
+        "T3Linkpearl.dll",
+        "T3Linkpearl.json",
         "icon.png",
         "t3code.png",
         "dead.png",
@@ -29,7 +29,7 @@ try {
         }
     }
 
-    $manifestEntry = $archive.GetEntry("T3CodeOverlay.json")
+    $manifestEntry = $archive.GetEntry("T3Linkpearl.json")
     $reader = [System.IO.StreamReader]::new($manifestEntry.Open())
     try {
         $manifest = $reader.ReadToEnd() | ConvertFrom-Json
@@ -38,7 +38,7 @@ try {
         $reader.Dispose()
     }
 
-    if ($manifest.InternalName -ne "T3CodeOverlay") {
+    if ($manifest.InternalName -ne "T3Linkpearl") {
         throw "Unexpected InternalName: $($manifest.InternalName)"
     }
 

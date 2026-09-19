@@ -1,0 +1,14 @@
+{
+    "Name": "T3 Linkpearl",
+    "Author": "Kim",
+    "Punchline": "Your T3 Code linkpearl inside FFXIV.",
+    "Description": "Adds a floating linkpearl that opens the real T3 Code web client inside FFXIV. Uses Browsingway's off-screen Chromium renderer.",
+    "RepoUrl": "https://github.com/wardy484/T3Linkpearl",
+    "Tags": [
+        "t3code",
+        "browser",
+        "overlay",
+        "chromium"
+    ],
+    "Changelog": "Initial testing release: draggable T3 linkpearl, attached animated browser, inactivity dimming, settings, and thread-status badges."
+}

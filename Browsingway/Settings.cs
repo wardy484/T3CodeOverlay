@@ -27,7 +27,7 @@ internal class Settings : Window, IDisposable
 
 	public Settings()
 		: base(
-			"T3 Code Overlay Settings###T3CodeOverlaySettings",
+			"T3 Linkpearl Settings###T3LinkpearlSettings",
 			ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoCollapse)
 	{
 		SizeConstraints = new WindowSizeConstraints

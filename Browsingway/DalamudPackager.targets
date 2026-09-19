@@ -1,6 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project>
 	<Target Name="PrepareOutput" AfterTargets="Build">
+		<RemoveDir Directories="$(OutputPath)\T3CodeOverlay"/>
 		<RemoveDir Directories="$(OutputPath)\locales"/>
 		<Copy SourceFiles="$(OutputPath)\Browsingway.Common.dll" DestinationFolder="$(OutputPath)\renderer"/>
 		<Copy SourceFiles="$(OutputPath)\Browsingway.Common.pdb" DestinationFolder="$(OutputPath)\renderer"/>

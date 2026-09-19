@@ -1,4 +1,4 @@
-# T3 Code Overlay
+# T3 Linkpearl
 
 T3 Code inside Final Fantasy XIV. A draggable bubble opens the real T3 Code web client in an interactive, rounded Chromium overlay.
 
@@ -12,16 +12,16 @@ Features include:
 
 ## Install
 
-T3 Code Overlay is currently a testing release.
+T3 Linkpearl is currently a testing release.
 
 1. Install [XIVLauncher](https://goatcorp.github.io/).
 2. Open Dalamud settings with `/xlsettings`, select **Experimental**, and add:
 
    ```text
-   https://wardy484.github.io/T3CodeOverlay/repo.json
+   https://wardy484.github.io/T3Linkpearl/repo.json
    ```
 
-3. Open `/xlplugins`, search for **T3 Code Overlay**, and install it.
+3. Open `/xlplugins`, search for **T3 Linkpearl**, and install it.
 4. Start T3 Code. The plugin expects `http://127.0.0.1:3773` by default.
 5. Approve the one-time Chromium dependency download and click the T3 bubble.
 
@@ -58,16 +58,24 @@ dotnet restore Browsingway/Browsingway.csproj --locked-mode -p:Platform=x64
 dotnet build Browsingway/Browsingway.csproj --configuration Release --no-restore -p:Platform=x64
 ```
 
-The dev-plugin entry point is `out/T3CodeOverlay.dll`. The installable package is `out/T3CodeOverlay/latest.zip`.
+The dev-plugin entry point is `out/T3Linkpearl.dll`. The installable package is `out/T3Linkpearl/latest.zip`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, architecture, and pull-request expectations.
 
+## Development disclosure
+
+T3 Linkpearl has been entirely vibe coded: Kim directed the product, tested it in FFXIV, and made the release decisions, while the implementation and documentation were written with AI coding agents. This is disclosed plainly so users and contributors can judge the project with the right context.
+
+AI assistance does not lower the bar for changes. Maintainers are responsible for understanding what ships, reviewing contributions, testing user-visible behaviour, and responding to security reports.
+
 ## Support
 
-Please use [GitHub Issues](https://github.com/wardy484/T3CodeOverlay/issues). Include your OS, Dalamud version, plugin version, and the relevant lines from `dalamud.log`. Do not attach the complete log without checking it for private information.
+Please use [GitHub Issues](https://github.com/wardy484/T3Linkpearl/issues). Include your OS, Dalamud version, plugin version, and the relevant lines from `dalamud.log`. Do not attach the complete log without checking it for private information.
 
 ## Attribution and licence
 
-T3 Code Overlay is derived from [Browsingway](https://github.com/Styr1x/Browsingway), which itself builds on [BrowserHost](https://github.com/ackwell/BrowserHost). The Chromium renderer, DirectX shared-texture transport, and input forwarding originate from those projects.
+T3 Linkpearl is derived from [Browsingway](https://github.com/Styr1x/Browsingway), which itself builds on [BrowserHost](https://github.com/ackwell/BrowserHost). The Chromium renderer, DirectX shared-texture transport, and input forwarding originate from those projects.
+
+It also relies on [CefSharp](https://github.com/cefsharp/CefSharp), the [Chromium Embedded Framework](https://github.com/chromiumembedded/cef), [Dalamud](https://github.com/goatcorp/Dalamud), and other dependencies listed in the locked NuGet manifests. Their own licences and notices apply.
 
 The project remains licensed under [GPL-3.0](LICENSE). See [NOTICE.md](NOTICE.md) for attribution. It is not affiliated with Square Enix or the Dalamud project.

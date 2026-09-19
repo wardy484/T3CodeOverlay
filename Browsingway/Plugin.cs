@@ -18,7 +18,7 @@ public class Plugin : IDalamudPlugin
 
 	private readonly DependencyManager _dependencyManager;
 	private readonly Dictionary<Guid, Overlay> _overlays = new();
-	private readonly WindowSystem _windowSystem = new("T3CodeOverlay");
+	private readonly WindowSystem _windowSystem = new("T3Linkpearl");
 	private readonly string _pluginConfigDir;
 	private readonly string _pluginDir;
 	private readonly ISharedImmediateTexture _bubbleIcon;
@@ -60,7 +60,7 @@ public class Plugin : IDalamudPlugin
 
 	// Required for LivePluginLoader support
 	public string AssemblyLocation { get; } = Assembly.GetExecutingAssembly().Location;
-	public string Name => "T3 Code Overlay";
+	public string Name => "T3 Linkpearl";
 
 	public void Dispose()
 	{
@@ -100,7 +100,7 @@ public class Plugin : IDalamudPlugin
 		{
 			if (!msg.HasDxSharedTexturesSupport)
 			{
-				Services.PluginLog.Error("Could not initialize shared textures transport. T3 Code Overlay will not work.");
+				Services.PluginLog.Error("Could not initialize shared textures transport. T3 Linkpearl will not work.");
 				return;
 			}
 

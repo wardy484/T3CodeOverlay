@@ -41,7 +41,7 @@ jobs:
       - name: Upload package
         uses: actions/upload-artifact@v7
         with:
-          name: T3CodeOverlay-windows-x64
-          path: out/T3CodeOverlay/latest.zip
+          name: T3Linkpearl-windows-x64
+          path: out/T3Linkpearl/latest.zip
           if-no-files-found: error
           retention-days: 14
