@@ -60,7 +60,7 @@ jobs:
           gh release create "${{ github.ref_name }}" out/T3CodeOverlay/latest.zip out/T3CodeOverlay/SHA256SUMS --verify-tag --generate-notes --title "T3 Code Overlay ${{ github.ref_name }}"
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
