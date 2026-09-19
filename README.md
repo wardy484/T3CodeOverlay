@@ -64,9 +64,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, architecture, and pull-r
 
 ## Development disclosure
 
-T3 Linkpearl has been entirely vibe coded: Kim directed the product, tested it in FFXIV, and made the release decisions, while the implementation and documentation were written with AI coding agents. This is disclosed plainly so users and contributors can judge the project with the right context.
-
-AI assistance does not lower the bar for changes. Maintainers are responsible for understanding what ships, reviewing contributions, testing user-visible behaviour, and responding to security reports.
+T3 Linkpearl has been entirely vibe coded, heavily inspired by a similar project built for WoW: Forever. 
 
 ## Support
 
