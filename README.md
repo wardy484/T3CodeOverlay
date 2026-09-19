@@ -78,4 +78,4 @@ T3 Linkpearl is derived from [Browsingway](https://github.com/Styr1x/Browsingway
 
 It also relies on [CefSharp](https://github.com/cefsharp/CefSharp), the [Chromium Embedded Framework](https://github.com/chromiumembedded/cef), [Dalamud](https://github.com/goatcorp/Dalamud), and other dependencies listed in the locked NuGet manifests. Their own licences and notices apply.
 
-The project remains licensed under [GPL-3.0](LICENSE). See [NOTICE.md](NOTICE.md) for attribution. It is not affiliated with Square Enix or the Dalamud project.
+The project remains licensed under [GPL-3.0](LICENSE). See [NOTICE.md](NOTICE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution. It is not affiliated with Square Enix or the Dalamud project.

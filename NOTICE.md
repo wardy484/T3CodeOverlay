@@ -3,10 +3,10 @@
 T3 Linkpearl is a modified version of Browsingway and is distributed under GPL-3.0.
 
 - Browsingway: copyright Styr1x and contributors — https://github.com/Styr1x/Browsingway
-- BrowserHost: copyright ackwell and contributors — https://github.com/ackwell/BrowserHost
+- BrowserHost (LGPL-3.0): copyright ackwell and contributors — https://github.com/ackwell/BrowserHost
 - T3 Linkpearl modifications: copyright 2026 Kim Ward and contributors
 
-The renderer uses CefSharp and the Chromium Embedded Framework. The plugin uses Dalamud and other third-party libraries recorded in the project and locked NuGet manifests. Those components remain under their respective licences; binary distributions retain the notices supplied with downloaded dependencies.
+The renderer uses CefSharp and the Chromium Embedded Framework. The plugin uses Dalamud and other third-party libraries recorded in the project and locked NuGet manifests. Those components remain under their respective licences. See `THIRD_PARTY_NOTICES.md`; downloaded Chromium dependencies also carry their own licence files.
 
 Major modifications include the T3-focused user experience, floating bubble, attached animated window, focus and opacity behaviour, T3 connection and thread-state monitoring, settings, packaging, and release automation.
 

@@ -19,6 +19,9 @@ try {
         "icon.png",
         "t3code.png",
         "dead.png",
+        "LICENSE.txt",
+        "NOTICE.md",
+        "THIRD_PARTY_NOTICES.md",
         "renderer/Browsingway.Renderer.exe",
         "renderer/Browsingway.Renderer.runtimeconfig.json"
     )

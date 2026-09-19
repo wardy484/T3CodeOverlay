@@ -52,10 +52,22 @@
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<TargetPath>t3code.png</TargetPath>
 		</Content>
-        <Content Include="images\dead.png">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		<Content Include="images\dead.png">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<TargetPath>dead.png</TargetPath>
-        </Content>
+		</Content>
+		<Content Include="..\LICENSE">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>LICENSE.txt</TargetPath>
+		</Content>
+		<Content Include="..\NOTICE.md">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>NOTICE.md</TargetPath>
+		</Content>
+		<Content Include="..\THIRD_PARTY_NOTICES.md">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<TargetPath>THIRD_PARTY_NOTICES.md</TargetPath>
+		</Content>
 	</ItemGroup>
 	
 </Project>
